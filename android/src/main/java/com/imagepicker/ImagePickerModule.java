@@ -267,7 +267,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
       requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
       cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
-      final File original = createNewFile(reactContext, this.options, false);
+
+      boolean shouldForceLocal = !(ReadableMapUtils.hasAndNotNullReadableMap(this.options, "storageOptions") && ReadableMapUtils.hasAndNotEmptyString(this.options.getMap("storageOptions"), "path"));
+      final File original = createNewFile(reactContext, this.options, shouldForceLocal);
       imageConfig = imageConfig.withOriginalFile(original);
 
       if (imageConfig.original != null) {
@@ -565,13 +567,23 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
                                    @NonNull final Callback callback,
                                    @NonNull final int requestCode)
   {
-    final int writePermission = ActivityCompat
-            .checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-    final int cameraPermission = ActivityCompat
-            .checkSelfPermission(activity, Manifest.permission.CAMERA);
+    int selfCheckResult = 0;
 
-    final boolean permissionsGrated = writePermission == PackageManager.PERMISSION_GRANTED &&
-            cameraPermission == PackageManager.PERMISSION_GRANTED;
+    switch (requestCode) {
+      case REQUEST_PERMISSIONS_FOR_CAMERA:
+        selfCheckResult = ActivityCompat.checkSelfPermission(activity, Manifest.permission.CAMERA);
+        if (ReadableMapUtils.hasAndNotNullReadableMap(options, "storageOptions") && ReadableMapUtils.hasAndNotEmptyString(options.getMap("storageOptions"), "path")) {
+          selfCheckResult = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+        break;
+      case REQUEST_LAUNCH_IMAGE_LIBRARY:
+        selfCheckResult = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        break;
+      default:
+        break;
+    }
+
+    final boolean permissionsGrated = selfCheckResult == PackageManager.PERMISSION_GRANTED;
 
     if (!permissionsGrated)
     {
@@ -621,7 +633,23 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
       }
       else
       {
-        String[] PERMISSIONS = {Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA};
+        String[] PERMISSIONS;
+        switch (requestCode) {
+          case REQUEST_PERMISSIONS_FOR_CAMERA:
+            if (ReadableMapUtils.hasAndNotNullReadableMap(options, "storageOptions") && ReadableMapUtils.hasAndNotEmptyString(options.getMap("storageOptions"), "path")) {
+              PERMISSIONS = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA};
+            } else {
+              PERMISSIONS = new String[]{Manifest.permission.CAMERA};
+            }
+            break;
+          case REQUEST_LAUNCH_IMAGE_LIBRARY:
+            PERMISSIONS = new String[]{Manifest.permission.CAMERA};
+            break;
+          default:
+            PERMISSIONS = new String[]{};
+            break;
+        }
+
         if (activity instanceof ReactActivity)
         {
           ((ReactActivity) activity).requestPermissions(PERMISSIONS, requestCode, listener);
